@@ -12,21 +12,23 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall   -O3")
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -march=native")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
+add_definitions(-DCOMPILEDWITHC11)
 # Check C++11 or C++0x support
-include(CheckCXXCompilerFlag)
-CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-if(COMPILER_SUPPORTS_CXX11)
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-   add_definitions(-DCOMPILEDWITHC11)
-   message(STATUS "Using flag -std=c++11.")
-elseif(COMPILER_SUPPORTS_CXX0X)
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
-   add_definitions(-DCOMPILEDWITHC0X)
-   message(STATUS "Using flag -std=c++0x.")
-else()
-   message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
-endif()
+#include(CheckCXXCompilerFlag)
+#CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+#CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+#if(COMPILER_SUPPORTS_CXX11)
+#   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+#   add_definitions(-DCOMPILEDWITHC11)
+#   message(STATUS "Using flag -std=c++11.")
+#elseif(COMPILER_SUPPORTS_CXX0X)
+#   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+#   add_definitions(-DCOMPILEDWITHC0X)
+#   message(STATUS "Using flag -std=c++0x.")
+#else()
+#   message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+#endif()
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
@@ -42,14 +44,14 @@ find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
 find_package(realsense2)
 
-include_directories(
-${PROJECT_SOURCE_DIR}
-${PROJECT_SOURCE_DIR}/include
-${PROJECT_SOURCE_DIR}/include/CameraModels
-${PROJECT_SOURCE_DIR}/Thirdparty/Sophus
-${EIGEN3_INCLUDE_DIR}
-${Pangolin_INCLUDE_DIRS}
-)
+# include_directories(
+# ${PROJECT_SOURCE_DIR}
+# ${PROJECT_SOURCE_DIR}/include
+# ${PROJECT_SOURCE_DIR}/include/CameraModels
+# ${PROJECT_SOURCE_DIR}/Thirdparty/Sophus
+# ${EIGEN3_INCLUDE_DIR}
+# ${Pangolin_INCLUDE_DIRS}
+# )
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
@@ -114,15 +116,35 @@ include/Config.h
 include/Settings.h)
 
 add_subdirectory(Thirdparty/g2o)
+add_subdirectory(Thirdparty/DBoW2)
+
+target_link_directories(${PROJECT_NAME} PUBLIC
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lib>
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Thirdparty/g2o/lib>
+$<INSTALL_INTERFACE:lib>
+)
 
 target_link_libraries(${PROJECT_NAME}
 ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
 ${Pangolin_LIBRARIES}
-${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
-${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
+-lDBoW2
+-lg2o
 -lboost_serialization
 -lcrypto
+)
+
+target_include_directories(${PROJECT_NAME} PUBLIC
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/CameraModels>
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Thirdparty/Sophus>
+$<INSTALL_INTERFACE:include>
+$<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+$<INSTALL_INTERFACE:include/${PROJECT_NAME}/CameraModels>
+$<INSTALL_INTERFACE:include/Thirdparty/Sophus>
+${EIGEN3_INCLUDE_DIR}
+${Pangolin_INCLUDE_DIRS}
 )
 
 # If RealSense SDK is found the library is added and its examples compiled
@@ -388,3 +410,71 @@ if(realsense2_FOUND)
             Examples_old/Stereo-Inertial/stereo_inertial_realsense_D435i.cc)
     target_link_libraries(stereo_inertial_realsense_D435i_old ${PROJECT_NAME})
 endif()
+
+install (TARGETS
+        ${PROJECT_NAME}
+        g2o
+        DBoW2
+    EXPORT ORBSLAM3Targets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+)
+
+install (EXPORT ORBSLAM3Targets
+    FILE ORBSLAM3Targets.cmake
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/cmake/ORBSLAM3
+)
+
+include (GNUInstallDirs)
+set (INCLUDE_INSTALL_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
+set (CAMERA_MODELS_INCLUDE_INSTALL_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/CameraModels)
+set (SOPHUS_INCLUDE_INSTALL_DIR ${CMAKE_INSTALL_INCLUDEDIR}/Thirdparty/Sophus)
+set (LIBRARY_INSTALL_DIR ${CMAKE_INSTALL_LIBDIR})
+
+include (CMakePackageConfigHelpers)
+configure_package_config_file (
+    ORBSLAM3Config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/ORBSLAM3Config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/cmake/ORBSLAM3
+    PATH_VARS
+        INCLUDE_INSTALL_DIR
+        CAMERA_MODELS_INCLUDE_INSTALL_DIR
+        SOPHUS_INCLUDE_INSTALL_DIR
+        LIBRARY_INSTALL_DIR
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/ORBSLAM3Config.cmake
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/cmake/ORBSLAM3
+)
+
+install (DIRECTORY
+    include/
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/${PROJECT_NAME}
+    FILES_MATCHING PATTERN "*.h"
+)
+
+install (DIRECTORY
+    Thirdparty/g2o
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/Thirdparty
+    FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.hpp"
+)
+
+install (DIRECTORY
+    Thirdparty/DBoW2
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/Thirdparty
+    FILES_MATCHING
+        PATTERN "*.h"
+)
+
+install (DIRECTORY
+    Thirdparty/Sophus/
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/Thirdparty/Sophus
+    FILES_MATCHING
+        PATTERN "*.hpp"
+        PATTERN "build" EXCLUDE
+        PATTERN "test" EXCLUDE
+        PATTERN "py" EXCLUDE
+)
